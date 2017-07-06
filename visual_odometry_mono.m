@@ -2,6 +2,8 @@ function [] = visual_odometry_mono(folderPath)
     %UNTITLED2 Summary of this function goes here
     %   Detailed explanation goes here
     
+    numFeatures = 500;
+    
     % get list of images
     images = dir(strcat(folderPath, '/*.png'));
     img_1_path = strcat(images(1).folder, '/', images(1).name);
@@ -12,7 +14,7 @@ function [] = visual_odometry_mono(folderPath)
     
     % FEATURE EXTRACTION
     % extract features from each
-    img_1_features = visual_odometry_mono_detectCorners(img_1);
+    img_1_features = visual_odometry_mono_detectCorners(img_1, numFeatures);
     %img_2_features = visual_odometry_mono_detectCorners(img_2);
     
     % FEATURE MATCHING
@@ -28,9 +30,10 @@ function [] = visual_odometry_mono(folderPath)
     img_1_features(bad_match_indeces,:) = [];
     img_2_features(bad_match_indeces,:) = [];
     
+    tmp = cornerPoints(img_1_features);
     figure;
     imshow(img_1); hold on;
-    plot(img_1_features);
+    plot(tmp);
     hold off;
     
 %     size(img_1_features.Location)

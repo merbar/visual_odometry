@@ -1,8 +1,14 @@
-function [corners] = visual_odometry_mono_detectCorners(img)
+function [corners] = visual_odometry_mono_detectCorners(img, num_features)
+    %visual_odometry_mono_detectCorners Detects evenly distributed corners 
+    % across image
+    %   Goes through image in chunks and extracts a max number of features
+    %   per bucket, leading to a more even distribution.
     [img_size_y, img_size_x] = size(img);
-    bucket_size = 200;
+    bucket_size = 100;
     x_bucket_count = ceil(img_size_x / bucket_size);
     y_bucket_count = ceil(img_size_y / bucket_size);
+    
+    features_per_bucket = ceil(num_features / (x_bucket_count * y_bucket_count));
 
     corners = [];
     for y = 1:1:y_bucket_count
@@ -21,6 +27,7 @@ function [corners] = visual_odometry_mono_detectCorners(img)
             end
             roi = [bucket_x_start bucket_y_start bucket_x_end-bucket_x_start bucket_y_end-bucket_y_start];
             crop_corners = detectFASTFeatures(img, 'MinQuality', 0.30, 'MinContrast', 0.2, 'ROI', roi);
+            crop_corners = crop_corners.selectStrongest(features_per_bucket);
             corners = [corners; crop_corners.Location];
         end
     end
