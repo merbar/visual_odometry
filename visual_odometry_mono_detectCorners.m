@@ -1,4 +1,4 @@
-function [corners] = visual_odometry_mono_detectCorners(img, num_features)
+function corners = visual_odometry_mono_detectCorners(img, num_features)
     %visual_odometry_mono_detectCorners Detects evenly distributed corners 
     % across image
     %   Goes through image in chunks and extracts a max number of features
