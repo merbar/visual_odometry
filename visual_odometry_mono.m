@@ -4,7 +4,8 @@ function [rMatrices tVectors] = visual_odometry_mono(folderPath)
     rMatrices = [];
     tVectors = [];
     
-    numFeatures = 500;
+    num_points = 400;
+    redetect = 0;
     
     % get list of images
     images = dir(strcat(folderPath, '/*.png'));
@@ -12,8 +13,9 @@ function [rMatrices tVectors] = visual_odometry_mono(folderPath)
     % get the camera intrinsic and extrinsic calibration
     % from KITTI matlab devkit
     calib = loadCalibrationCamToCam(fullfile(folderPath,'calib_cam_to_cam.txt'));
-    K = transpose(calib.K{1});
-    K(2, 2) = K(2, 2) + 1.0;
+    K = calib.K{1};
+    %K = transpose(calib.K{1});
+    %K(2, 2) = K(2, 2) + 1.0;
     cameraParams = cameraParameters('IntrinsicMatrix', K);
 
     
@@ -34,56 +36,80 @@ function [rMatrices tVectors] = visual_odometry_mono(folderPath)
             img_2 = rgb2gray(img_2);
         end
 
-        % FEATURE EXTRACTION
-        img_1_features = visual_odometry_mono_detectCorners(img_1, numFeatures);
+        % FEATURE DETECTION
+        [img_1_features img_1_points] = visual_odometry_mono_detectCorners(img_1, num_points);
+        % Detect and extract features from the current image.
+%         img_1_points = detectSURFFeatures(img_1, 'MetricThreshold', 500);
+%         img_1_points = selectUniform(img_1_points, num_points, size(img_1));
+%         img_1_features = extractFeatures(img_1, img_1_points, 'Upright', true);
+        
+        
 
         % FEATURE MATCHING
         % Just tracking the points from one frame to the next, and then again
         % doing the detection part, but in a better implmentation, one would
         % track these points as long as the number of points do not drop below
         % a particular threshold.
-        tracker = vision.PointTracker('MaxBidirectionalError', 1);
-        initialize(tracker, img_1_features.Location, img_1);
-        [img_2_features, validity] = step(tracker, img_2);
-        bad_match_indeces = validity(:)==0;
-        img_1_features = img_1_features.Location;
-        img_1_features(bad_match_indeces,:) = [];
-        img_2_features(bad_match_indeces,:) = [];
+        % Detect and extract features from the current image.
+        if redetect == 1
+            [img_2_features img_2_points] = visual_odometry_mono_detectCorners(img_2, num_points);
+            % Match features between the previous and current image.
+            feature_index_pairs = matchFeatures(img_1_features, img_2_features, 'Unique', true);
+            
+%         img_2_points = detectSURFFeatures(img_2, 'MetricThreshold', 500);
+%         img_2_points = selectUniform(img_2_points, num_points, size(img_2));
 
-%         tmp = cornerPoints(img_1_features);
-%         figure;
-%         imshow(img_1); hold on;
-%         plot(tmp);
-%         hold off;
+        
+            %img_2_features
+        else
+            tracker = vision.PointTracker('MaxBidirectionalError', 1);
+            initialize(tracker, img_1_points.Location, img_1);
+            [img_2_points, validity] = step(tracker, img_2);
+            bad_match_indeces = validity(:)==0;
+            img_1_features(bad_match_indeces,:) = [];
+            img_1_points(bad_match_indeces,:) = [];
+            img_2_points(bad_match_indeces,:) = [];
+            img_2_points = SURFPoints(img_2_points);
+            img_2_features = extractFeatures(img_2, img_2_points, 'Upright', true);
+            %img_2_points = cornerPoints(img_2_points);
+            feature_index_pairs = matchFeatures(img_1_features, img_2_features, 'Unique', true);
+        end
 
-        % ESSENTIAL MATRIX
-        % uses MSAC
-        img_1_features = cornerPoints(img_1_features);
-        img_2_features = cornerPoints(img_2_features);
-        [E, inliers] = estimateEssentialMatrix(img_1_features, img_2_features, cameraParams);
+        matchedPoints1 = img_1_points(feature_index_pairs(:,1));
+        matchedPoints2 = img_2_points(feature_index_pairs(:,2));
+        figure;
+        showMatchedFeatures(img_1,img_2,matchedPoints1,matchedPoints2);
+               
+        % COMPUTE R and t. Matlab helper function computes Essential
+        % Matrix, etc.
+        [R, t, inlierIdx] = helperEstimateRelativePose(img_1_points(feature_index_pairs(:,1)), img_2_points(feature_index_pairs(:,2)), cameraParams);
 
-        inlierPoints1 = img_1_features(inliers);
-        inlierPoints2 = img_2_features(inliers);
-%         figure
-%         showMatchedFeatures(img_1,img_2,inlierPoints1,inlierPoints2);
-%         title('Inlier Matches')
+%         img_1_features = cornerPoints(img_1_features);
+%         img_2_features = cornerPoints(img_2_features);
+%         [E, inliers] = estimateEssentialMatrix(img_1_features, img_2_features, cameraParams);
+%         
+%         inlierPoints1 = img_1_features(inliers);
+%         inlierPoints2 = img_2_features(inliers);
+%       figure
+%       showMatchedFeatures(img_1,img_2,inlierPoints1,inlierPoints2);
+%       title('Inlier Matches')
 
         % - COMPUTE R and t
         % relativeCameraPose decomposes E and finds correct solution out of
         % the four for R (2x) and t (2x)
-        [relativeOrientation,relativeLocation] = relativeCameraPose(E,cameraParams,inlierPoints1,inlierPoints2);
+        % [relativeRotation,relativeLocation] = relativeCameraPose(E,cameraParams,inlierPoints1,inlierPoints2);
         
-        %[rotationMatrix,translationVector] = cameraPoseToExtrinsics(relativeOrientation,relativeLocation)
+        %[rotationMatrix,translationVector] = cameraPoseToExtrinsics(relativeRotation,relativeLocation)
         
         % assumption: we always travel forward
         % invert vector and matrix if vector is pointing in negative
         % direction
-        if relativeLocation(1) < 0
-            relativeLocation = relativeLocation * -1;
-            relativeOrientation = inv(relativeOrientation);
-        end
-        rMatrices = cat(3, rMatrices, relativeOrientation);
-        tVectors = [tVectors; relativeLocation];
+%         if relativeLocation(1) < 0
+%             relativeLocation = relativeLocation * -1;
+%             relativeRotation = inv(relativeRotation);
+%         end
+        rMatrices = cat(3, rMatrices, R);
+        tVectors = [tVectors; t];
     end
 end
 

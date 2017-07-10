@@ -1,4 +1,4 @@
-function corners = visual_odometry_mono_detectCorners(img, num_features)
+function [features points] = visual_odometry_mono_detectCorners(img, num_features)
     %visual_odometry_mono_detectCorners Detects evenly distributed corners 
     % across image
     %   Goes through image in chunks and extracts a max number of features
@@ -10,7 +10,8 @@ function corners = visual_odometry_mono_detectCorners(img, num_features)
     
     features_per_bucket = ceil(num_features / (x_bucket_count * y_bucket_count));
 
-    corners = [];
+    features = [];
+    points = [];
     for y = 1:1:y_bucket_count
         bucket_y_start = (y-1) * bucket_size + 1;
         if y == y_bucket_count
@@ -26,10 +27,15 @@ function corners = visual_odometry_mono_detectCorners(img, num_features)
                 bucket_x_end = bucket_x_start + bucket_size;
             end
             roi = [bucket_x_start bucket_y_start bucket_x_end-bucket_x_start bucket_y_end-bucket_y_start];
-            crop_corners = detectFASTFeatures(img, 'MinQuality', 0.30, 'MinContrast', 0.2, 'ROI', roi);
-            crop_corners = crop_corners.selectStrongest(features_per_bucket);
-            corners = [corners; crop_corners.Location];
+            crop_corners = detectSURFFeatures(img, 'MetricThreshold', 500, 'ROI', roi);
+            crop_corners = detectHarrisFeatures(img, 'ROI', roi);
+            %crop_corners = crop_corners.selectStrongest(features_per_bucket);
+            tmp = crop_corners.Location;
+            tmp = SURFPoints(tmp);
+            [valid_features, valid_corners] = extractFeatures(img, tmp, 'Upright', true);
+            features = [features; valid_features];
+            points = [points; crop_corners.Location];
         end
     end
-    corners = cornerPoints(corners);
+    points = SURFPoints(points);
 end

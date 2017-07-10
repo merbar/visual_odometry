@@ -2,7 +2,7 @@
 % https://github.com/avisingh599/vo-howard08/blob/master/src/visodo.m
 
 clear
-[rMatrices tVectors] = visual_odometry_mono('data/img_1');
+[rMatrices tVectors] = visual_odometry_mono('data/debug');
 
 % assert that we have the same number of rotation matrices and translation
 % vectors
@@ -14,23 +14,22 @@ assert(size(tVectors, 1) == size(rMatrices, 3));
 speed = 3.0;
 
 % create array of 2D points starting from origin
-cur_coord = [0 0 1];
-vehicle_coordinates = cur_coord(1:2);
+cur_coord = [0 0 0];
+cur_orient = eye(3);
+grid_coordinates = cur_coord;
 
 % progress through each data point
-for i = 1:1:size(tVectors, 1)-1
-    rotMat = rMatrices(:,:,i);
-    transVec = tVectors(i,:);
-    rotTransMat = rotMat;
-    rotTransMat(1,3) = transVec(1);
-    rotTransMat(2,3) = transVec(2);
-    rotTransMat(3,3) = 1.0;
-    rotTransMat(3,1) = 0;
-    rotTransMat(3,2) = 0;
+for i = 1:1:size(tVectors, 1)
+    R = rMatrices(:,:,i);
+    t = tVectors(i,:);
+%     rotTransMat = rotMat;
+%     rotTransMat(1,3) = transVec(1);
+%     rotTransMat(2,3) = transVec(2);
+%     rotTransMat(3,3) = 1.0;
+%     rotTransMat(3,1) = 0;
+%     rotTransMat(3,2) = 0;
     % vector and matrix aren't aligned the same
-    rotTransMat = rotTransMat';
-    cur_coord = cur_coord * rotTransMat;
-    %cur_coord(3) = 1.0;
-    coord2d = cur_coord(1:2);
-    vehicle_coordinates = [vehicle_coordinates; coord2d];
+    cur_coord = cur_coord + t;
+    cur_orient = cur_orient * R;
+    grid_coordinates = [grid_coordinates; cur_coord];
 end
